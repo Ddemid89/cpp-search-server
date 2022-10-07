@@ -78,12 +78,11 @@ public:
     void AddDocument(int document_id, const string& document) {
         const vector<string> words = SplitIntoWordsNoStop(document);
         for (auto word : words) {
-            (documents_[word])[document_id]++; //map <string, map <int, int>> documents_;
+            documents_[word][document_id] += 1. / words.size(); //map <string, map <int, int>> documents_;
         }                                      //map <слово, map <ID документа, количество вхождения этого слова в этом док-те>>
         documents_count++;
-        docs_size.push_back(words.size());     //Знаю, что в подсказке предлагалось сразу считать TF для каждого слова
     }
-    
+
 /**
 Получает текст запроса и возвращает отсортированный вектор Document (id, relevance) (не более MAX_RESULT_DOCUMENT_COUNT)
 */
@@ -114,8 +113,7 @@ public:
 
 private:
     int documents_count = 0;
-    vector<int> docs_size; //Размеры каждого документа
-    map<string, map<int, int>> documents_;// map<слово, map<id док-та, кол-во вхождений слова>>
+    map<string, map<int, double>> documents_;// map<слово, map<id док-та, TF слова>>
     set<string> stop_words_;
 
 /**
@@ -155,6 +153,13 @@ private:
     }
 
 /**
+Принимает общее кол-во документов, кол-во документов, в которых содержится слово и вохвращает IDF этого слова
+*/
+double getIDF(int documents_count, int documents_with_word_count) const {
+    return log(static_cast<double>(documents_count) / documents_with_word_count);
+}
+
+/**
 Ищет все документы, в которых содержится хотя-бы одно слово из запроса и не содержится минус-слов, вычисляет TF-IDF релевантность.
 Если количество документов == 1, релевантность будет == 0 в любом случае.
 */
@@ -166,9 +171,8 @@ private:
         for (const string& word : query_words) {
             double idf;
             if (documents_.count(word) != 0) {
-                idf = log((double)documents_count / documents_.at(word).size());
-                for (const auto& [id, cnt] : documents_.at(word)) {
-                    double tf = (double)cnt / docs_size[id];
+                idf = getIDF(documents_count, documents_.at(word).size());
+                for (const auto& [id, tf] : documents_.at(word)) {
                     documents_relevations[id] += tf * idf;
                 }
             }
@@ -176,7 +180,7 @@ private:
 
         for(auto word : minus_words) {
             if(documents_.count(word) != 0) {
-                for(auto [id, count] : documents_.at(word)) {
+                for(auto [id, tf] : documents_.at(word)) {
                     documents_relevations.erase(id);
                 }
             }
