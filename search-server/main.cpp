@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <numeric>
 
 using namespace std;
 
@@ -80,10 +81,11 @@ public:
     vector<Document> FindTopDocuments(const string& raw_query, Key_mapper key_mapper) const {
         const Query query = ParseQuery(raw_query);
         auto matched_documents = FindAllDocuments(query, key_mapper);
+        const double EPSILON = 10e-6;
 
         sort(matched_documents.begin(), matched_documents.end(),
              [](const Document& lhs, const Document& rhs) {
-                 if (abs(lhs.relevance - rhs.relevance) < 1e-6) {
+                 if (abs(lhs.relevance - rhs.relevance) < EPSILON) {//Вообще, у меня изначально так и было. Это тренажер меня поправил
                      return lhs.rating > rhs.rating;
                  } else {
                      return lhs.relevance > rhs.relevance;
@@ -155,11 +157,7 @@ private:
         if (ratings.empty()) {
             return 0;
         }
-        int rating_sum = 0;
-        for (const int rating : ratings) {
-            rating_sum += rating;
-        }
-        return rating_sum / static_cast<int>(ratings.size());
+        return accumulate(ratings.begin(), ratings.end(), 0, plus<int>()) / static_cast<int>(ratings.size());;
     }
 
     struct QueryWord {
@@ -213,8 +211,8 @@ private:
             const double inverse_document_freq = ComputeWordInverseDocumentFreq(word);
 
             for (const auto [document_id, term_freq] : word_to_document_freqs_.at(word)) {
-                auto& cur = documents_.at(document_id);
-                if (key_mapper(document_id, cur.status, cur.rating)) {
+                const auto& current_document = documents_.at(document_id);
+                if (key_mapper(document_id, current_document.status, current_document.rating)) {
                     document_to_relevance[document_id] += term_freq * inverse_document_freq;
                 }
             }
