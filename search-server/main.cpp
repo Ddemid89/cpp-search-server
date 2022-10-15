@@ -11,6 +11,7 @@
 using namespace std;
 
 const int MAX_RESULT_DOCUMENT_COUNT = 5;
+const double EPSILON = 10e-6;
 
 string ReadLine() {
     string s;
@@ -81,7 +82,6 @@ public:
     vector<Document> FindTopDocuments(const string& raw_query, Key_mapper key_mapper) const {
         const Query query = ParseQuery(raw_query);
         auto matched_documents = FindAllDocuments(query, key_mapper);
-        const double EPSILON = 10e-6;
 
         sort(matched_documents.begin(), matched_documents.end(),
              [](const Document& lhs, const Document& rhs) {
