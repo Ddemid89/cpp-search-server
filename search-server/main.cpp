@@ -1,270 +1,332 @@
-#include <algorithm>
-#include <cmath>
-#include <iostream>
-#include <map>
-#include <set>
-#include <string>
-#include <utility>
-#include <vector>
-#include <numeric>
-
-using namespace std;
-
-const int MAX_RESULT_DOCUMENT_COUNT = 5;
+// -------- Начало модульных тестов поисковой системы ----------
 const double EPSILON = 10e-6;
+void TestExcludeStopWordsFromAddedDocumentContent() {
+    const int doc_id = 42;
+    const string content = "cat in the city"s;
+    const vector<int> ratings = {1, 2, 3};
+    {
+        SearchServer server;
+        server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
+        const auto found_docs = server.FindTopDocuments("in"s);
+        ASSERT_EQUAL(found_docs.size(), 1u);
+        const Document& doc0 = found_docs[0];
+        ASSERT_EQUAL(doc0.id, doc_id);
+    }
 
-string ReadLine() {
-    string s;
-    getline(cin, s);
-    return s;
+    {
+        SearchServer server;
+        server.SetStopWords("in the"s);
+        server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
+        ASSERT_HINT(server.FindTopDocuments("in"s).empty(),
+                    "Stop words must be excluded from documents"s);
+    }
 }
 
-int ReadLineWithNumber() {
-    int result;
-    cin >> result;
-    ReadLine();
-    return result;
+//Добавление документов. Добавленный документ должен находиться по поисковому запросу, который содержит слова из документа.
+//Поддержка стоп-слов. Стоп-слова исключаются из текста документов.
+void AddingTest() {
+    SearchServer ss;
+    ss.SetStopWords("s1 s2 s3");
+    ss.AddDocument(0, "a b c s1 d e f"s, DocumentStatus::ACTUAL, {1});
+    ss.AddDocument(1, "b c d e s2 g h"s, DocumentStatus::ACTUAL, {1});
+    ss.AddDocument(2, "s3 s2 a o c p"s, DocumentStatus::ACTUAL, {1});
+    ASSERT(ss.FindTopDocuments("s1 c"s).size() == 3);
+    ASSERT(ss.FindTopDocuments("b s2 s3"s).size() == 2);
+    ASSERT(ss.FindTopDocuments("s2 p s1"s).size() == 1);
+    ASSERT(ss.FindTopDocuments("s1 s2 s3"s).size() == 0);
+    ASSERT(ss.FindTopDocuments("y z x"s).size() == 0);
 }
 
-vector<string> SplitIntoWords(const string& text) {
-    vector<string> words;
-    string word;
-    for (const char c : text) {
-        if (c == ' ') {
-            if (!word.empty()) {
-                words.push_back(word);
-                word.clear();
-            }
-        } else {
-            word += c;
-        }
-    }
-    if (!word.empty()) {
-        words.push_back(word);
-    }
-
-    return words;
+//Поддержка минус-слов. Документы, содержащие минус-слова поискового запроса, не должны включаться в результаты поиска.
+void MinusWordsTest() {
+    SearchServer ss;
+    ss.SetStopWords("s1 s2 s3");
+    ss.AddDocument(0, "a b c s1"s, DocumentStatus::ACTUAL, {1});
+    ss.AddDocument(1, "a b c d e s2"s, DocumentStatus::ACTUAL, {1});
+    ss.AddDocument(2, "a b c d e f g s3"s, DocumentStatus::ACTUAL, {1});
+    ASSERT(ss.FindTopDocuments("a -f s2"s).size() == 2);
+    ASSERT(ss.FindTopDocuments("s3 b -d "s).size() == 1);
+    ASSERT(ss.FindTopDocuments("-a b s3 c d e s1"s).size() == 0);
+    ASSERT(ss.FindTopDocuments("a -s2"s).size() == 3);
+    ASSERT(ss.FindTopDocuments("a - p"s).size() == 3);
 }
 
-struct Document {
-    int id;
-    double relevance;
-    int rating;
-};
+//Матчинг документов. При матчинге документа по поисковому запросу должны быть возвращены все слова из поискового запроса,
+//присутствующие в документе. Если есть соответствие хотя бы по одному минус-слову, должен возвращаться пустой список слов.
+void MatchingTest() {
+    SearchServer ss;
+    ss.AddDocument(0, "a b c ", DocumentStatus::ACTUAL, {1});
+    ss.AddDocument(1, "a b c d", DocumentStatus::ACTUAL, {1});
+    ss.AddDocument(2, "a b c d e", DocumentStatus::ACTUAL, {1});
 
-enum class DocumentStatus {
-    ACTUAL,
-    IRRELEVANT,
-    BANNED,
-    REMOVED,
-};
-
-class SearchServer {
-public:
-    void SetStopWords(const string& text) {
-        for (const string& word : SplitIntoWords(text)) {
-            stop_words_.insert(word);
-        }
-    }
-
-    void AddDocument(int document_id, const string& document, DocumentStatus status,
-                     const vector<int>& ratings) {
-        const vector<string> words = SplitIntoWordsNoStop(document);
-        const double inv_word_count = 1.0 / words.size();
-        for (const string& word : words) {
-            word_to_document_freqs_[word][document_id] += inv_word_count;
-        }
-        documents_.emplace(document_id, DocumentData{ComputeAverageRating(ratings), status});
-    }
-
-
-    template <class Key_mapper>
-    vector<Document> FindTopDocuments(const string& raw_query, Key_mapper key_mapper) const {
-        const Query query = ParseQuery(raw_query);
-        auto matched_documents = FindAllDocuments(query, key_mapper);
-
-        sort(matched_documents.begin(), matched_documents.end(),
-             [](const Document& lhs, const Document& rhs) {
-                 if (abs(lhs.relevance - rhs.relevance) < EPSILON) {//Вообще, у меня изначально так и было. Это тренажер меня поправил
-                     return lhs.rating > rhs.rating;
-                 } else {
-                     return lhs.relevance > rhs.relevance;
-                 }
-             });
-        if (matched_documents.size() > MAX_RESULT_DOCUMENT_COUNT) {
-            matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);
-        }
-        return matched_documents;
-    }
-
-    vector<Document> FindTopDocuments(const string& raw_query, DocumentStatus target_status = DocumentStatus::ACTUAL) const {
-        return FindTopDocuments(raw_query, [target_status](int document_id, DocumentStatus status, int rating) { return status == target_status; });
-    }
-
-    int GetDocumentCount() const {
-        return documents_.size();
-    }
-
-    tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query,
-                                                        int document_id) const {
-        const Query query = ParseQuery(raw_query);
-        vector<string> matched_words;
-        for (const string& word : query.plus_words) {
-            if (word_to_document_freqs_.count(word) == 0) {
-                continue;
-            }
-            if (word_to_document_freqs_.at(word).count(document_id)) {
-                matched_words.push_back(word);
-            }
-        }
-        for (const string& word : query.minus_words) {
-            if (word_to_document_freqs_.count(word) == 0) {
-                continue;
-            }
-            if (word_to_document_freqs_.at(word).count(document_id)) {
-                matched_words.clear();
-                break;
-            }
-        }
-        return {matched_words, documents_.at(document_id).status};
-    }
-
-private:
-    struct DocumentData {
-        int rating;
-        DocumentStatus status;
-    };
-
-    set<string> stop_words_;
-    map<string, map<int, double>> word_to_document_freqs_;
-    map<int, DocumentData> documents_;
-
-    bool IsStopWord(const string& word) const {
-        return stop_words_.count(word) > 0;
-    }
-
-    vector<string> SplitIntoWordsNoStop(const string& text) const {
-        vector<string> words;
-        for (const string& word : SplitIntoWords(text)) {
-            if (!IsStopWord(word)) {
-                words.push_back(word);
-            }
-        }
-        return words;
-    }
-
-    static int ComputeAverageRating(const vector<int>& ratings) {
-        if (ratings.empty()) {
-            return 0;
-        }
-        return accumulate(ratings.begin(), ratings.end(), 0, plus<int>()) / static_cast<int>(ratings.size());;
-    }
-
-    struct QueryWord {
-        string data;
-        bool is_minus;
-        bool is_stop;
-    };
-
-    QueryWord ParseQueryWord(string text) const {
-        bool is_minus = false;
-        // Word shouldn't be empty
-        if (text[0] == '-') {
-            is_minus = true;
-            text = text.substr(1);
-        }
-        return {text, is_minus, IsStopWord(text)};
-    }
-
-    struct Query {
-        set<string> plus_words;
-        set<string> minus_words;
-    };
-
-    Query ParseQuery(const string& text) const {
-        Query query;
-        for (const string& word : SplitIntoWords(text)) {
-            const QueryWord query_word = ParseQueryWord(word);
-            if (!query_word.is_stop) {
-                if (query_word.is_minus) {
-                    query.minus_words.insert(query_word.data);
-                } else {
-                    query.plus_words.insert(query_word.data);
-                }
-            }
-        }
-        return query;
-    }
-
-    // Existence required
-    double ComputeWordInverseDocumentFreq(const string& word) const {
-        return log(GetDocumentCount() * 1.0 / word_to_document_freqs_.at(word).size());
-    }
-
-    template <class Key_mapper>
-    vector<Document> FindAllDocuments(const Query& query, Key_mapper key_mapper) const {
-        map<int, double> document_to_relevance;
-        for (const string& word : query.plus_words) {
-            if (word_to_document_freqs_.count(word) == 0) {
-                continue;
-            }
-            const double inverse_document_freq = ComputeWordInverseDocumentFreq(word);
-
-            for (const auto [document_id, term_freq] : word_to_document_freqs_.at(word)) {
-                const auto& current_document = documents_.at(document_id);
-                if (key_mapper(document_id, current_document.status, current_document.rating)) {
-                    document_to_relevance[document_id] += term_freq * inverse_document_freq;
-                }
-            }
-
-        }
-
-        for (const string& word : query.minus_words) {
-            if (word_to_document_freqs_.count(word) == 0) {
-                continue;
-            }
-            for (const auto [document_id, _] : word_to_document_freqs_.at(word)) {
-                document_to_relevance.erase(document_id);
-            }
-        }
-
-        vector<Document> matched_documents;
-        for (const auto [document_id, relevance] : document_to_relevance) {
-            matched_documents.push_back(
-                {document_id, relevance, documents_.at(document_id).rating});
-        }
-        return matched_documents;
-    }
-
-};
-
-
-
-void PrintDocument(const Document& document) {
-    cout << "{ "s
-         << "document_id = "s << document.id << ", "s
-         << "relevance = "s << document.relevance << ", "s
-         << "rating = "s << document.rating << " }"s << endl;
+    {auto [res, stat] = ss.MatchDocument("a c d e f", 0);
+    ASSERT(res.size() == 2);}
+    {auto [res, stat] = ss.MatchDocument("a c d e f", 1);
+    ASSERT(res.size() == 3);}
+    {auto [res, stat] = ss.MatchDocument("a c d e f", 2);
+    ASSERT(res.size() == 4);}
+    {auto [res, stat] = ss.MatchDocument("q w e r t y", 0);
+    ASSERT(res.size() == 0);}
+    {auto [res, stat] = ss.MatchDocument("q w e r t y", 1);
+    ASSERT(res.size() == 0);}
+    {auto [res, stat] = ss.MatchDocument("q w e r t y", 2);
+    ASSERT(res.size() == 1);}
 }
 
-int main() {
-    SearchServer search_server;
-    search_server.SetStopWords("и в на"s);
-    search_server.AddDocument(0, "белый кот и модный ошейник"s,        DocumentStatus::ACTUAL, {8, -3});
-    search_server.AddDocument(1, "пушистый кот пушистый хвост"s,       DocumentStatus::ACTUAL, {7, 2, 7});
-    search_server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, {5, -12, 2, 1});
-    search_server.AddDocument(3, "ухоженный скворец евгений"s,         DocumentStatus::BANNED, {9});
-    cout << "ACTUAL by default:"s << endl;
-    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s)) {
-        PrintDocument(document);
-    }
-    cout << "BANNED:"s << endl;
-    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, DocumentStatus::BANNED)) {
-        PrintDocument(document);
-    }
-    cout << "Even ids:"s << endl;
-    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, [](int document_id, DocumentStatus status, int rating) { return document_id % 2 == 0; })) {
-        PrintDocument(document);
-    }
-    return 0;
+//Сортировка найденных документов по релевантности.
+//Возвращаемые при поиске документов результаты должны быть отсортированы в порядке убывания релевантности.
+void SortTest() {
+    SearchServer ss;
+    ss.AddDocument(0, "a b c d e", DocumentStatus::ACTUAL, {1});
+    ss.AddDocument(1, "b c d e f", DocumentStatus::ACTUAL, {1});
+    ss.AddDocument(2, "c d e f g", DocumentStatus::ACTUAL, {1});
+    ss.AddDocument(3, "d e f g h", DocumentStatus::ACTUAL, {1});
+
+    vector<Document> res;
+
+    res = ss.FindTopDocuments("a b c");
+    ASSERT(res.size() == 3);
+    ASSERT(res[0].id == 0);
+    ASSERT(res[1].id == 1);
+    ASSERT(res[2].id == 2);
+
+    res = ss.FindTopDocuments("e f g h");
+    ASSERT(res.size() == 4);
+    ASSERT(res[0].id == 3);
+    ASSERT(res[1].id == 2);
+    ASSERT(res[2].id == 1);
+    ASSERT(res[3].id == 0);
 }
+
+//Вычисление рейтинга документов. Рейтинг добавленного документа равен среднему арифметическому оценок документа.
+void RatingTest() {
+    SearchServer ss;
+    ss.AddDocument(0, "a a a", DocumentStatus::ACTUAL, {2, 3, 4}); // 3
+    ss.AddDocument(1, "b b b", DocumentStatus::ACTUAL, {2, 3, -4}); // 0
+    ss.AddDocument(2, "c c c", DocumentStatus::ACTUAL, {2, -6, 4}); // 0
+    ss.AddDocument(3, "d d d", DocumentStatus::ACTUAL, {2}); // 2
+    ss.AddDocument(4, "e e e", DocumentStatus::ACTUAL, {0}); //0
+    ss.AddDocument(5, "f f f", DocumentStatus::ACTUAL, {}); //0
+    ss.AddDocument(6, "g g g", DocumentStatus::ACTUAL, {-3, 2, -5}); //-2
+
+    vector<Document> res;
+
+    res = ss.FindTopDocuments("a");
+    ASSERT(res.size() == 1);
+    ASSERT(res[0].id == 0);
+    ASSERT(res[0].rating == 3);
+
+    res = ss.FindTopDocuments("b");
+    ASSERT(res.size() == 1);
+    ASSERT(res[0].id == 1);
+    ASSERT(res[0].rating == 0);
+
+    res = ss.FindTopDocuments("c");
+    ASSERT(res.size() == 1);
+    ASSERT(res[0].id == 2);
+    ASSERT(res[0].rating == 0);
+
+    res = ss.FindTopDocuments("d");
+    ASSERT(res.size() == 1);
+    ASSERT(res[0].id == 3);
+    ASSERT(res[0].rating == 2);
+
+    res = ss.FindTopDocuments("e");
+    ASSERT(res.size() == 1);
+    ASSERT(res[0].id == 4);
+    ASSERT(res[0].rating == 0);
+
+    res = ss.FindTopDocuments("f");
+    ASSERT(res.size() == 1);
+    ASSERT(res[0].id == 5);
+    ASSERT(res[0].rating == 0);
+
+    res = ss.FindTopDocuments("g");
+    ASSERT(res.size() == 1);
+    ASSERT(res[0].id == 6);
+    ASSERT(res[0].rating == -2);
+
+}
+
+//Фильтрация результатов поиска с использованием предиката, задаваемого пользователем.
+void FilterTest() {
+    SearchServer ss;
+    int i = 0;
+    ss.AddDocument(i++, "a a1", DocumentStatus::ACTUAL, {-10, 30});//10
+    ss.AddDocument(i++, "a a2", DocumentStatus::ACTUAL, {3, -3, 27});//9
+    ss.AddDocument(i++, "a a3", DocumentStatus::ACTUAL, {9, 7});//8
+    ss.AddDocument(i++, "a a4", DocumentStatus::BANNED, {7, 6, 8, 7, 21, -7, 7});//7
+    ss.AddDocument(i++, "a a5", DocumentStatus::BANNED, {6, 14, 7, -3});//6
+    ss.AddDocument(i++, "a a6", DocumentStatus::BANNED, {20, -10});//5
+    ss.AddDocument(i++, "a a7", DocumentStatus::IRRELEVANT, {4});//4
+    ss.AddDocument(i++, "a a8", DocumentStatus::IRRELEVANT, {6, 0});//3
+    ss.AddDocument(i++, "a a9", DocumentStatus::IRRELEVANT, {-4, 8});//2
+    ss.AddDocument(i++, "a a10", DocumentStatus::REMOVED, {1, 1, 1, 1});//1
+    ss.AddDocument(i++, "a a11", DocumentStatus::REMOVED, {1, 2, 3, -6});//0
+
+    vector <Document> res;
+
+    res = ss.FindTopDocuments("a", [](int document_id, DocumentStatus doc_stat, int rat){
+                                doc_stat = doc_stat;
+                                rat = rat;
+                                return document_id % 2 == 0;
+                              });
+    ASSERT(res.size() == 5);
+
+    res = ss.FindTopDocuments("a", [](int document_id, DocumentStatus doc_stat, int rat){
+                                doc_stat = doc_stat;
+                                rat = rat;
+                                return document_id % 3 == 0;
+                              });
+    ASSERT(res.size() == 4);
+
+    res = ss.FindTopDocuments("a", [](int document_id, DocumentStatus doc_stat, int rat){
+                                document_id = document_id;
+                                rat = rat;
+                                return doc_stat != DocumentStatus::BANNED;
+                              });
+    ASSERT(res.size() == 5);
+
+    res = ss.FindTopDocuments("a", [](int document_id, DocumentStatus doc_stat, int rat){
+                                document_id = document_id;
+                                return doc_stat != DocumentStatus::BANNED && rat > 6;
+                              });
+    ASSERT(res.size() == 3);
+
+    res = ss.FindTopDocuments("a", [](int document_id, DocumentStatus doc_stat, int rat){
+                                document_id = document_id;
+                                doc_stat = doc_stat;
+                                return rat > 6;
+                              });
+    ASSERT(res.size() == 4);
+
+    res = ss.FindTopDocuments("a", [](int document_id, DocumentStatus doc_stat, int rat){
+                                document_id = document_id;
+                                doc_stat = doc_stat;
+                                return rat <= 3;
+                              });
+    ASSERT(res.size() == 4);
+}
+
+//Поиск документов, имеющих заданный статус.
+void SearchTest() {
+    SearchServer ss;
+    int i = 0;
+    ss.AddDocument(i++, "a a1", DocumentStatus::ACTUAL, {-10, 30});//10
+    ss.AddDocument(i++, "a b a2", DocumentStatus::ACTUAL, {3, -3, 27});//9
+    ss.AddDocument(i++, "a b c a3", DocumentStatus::ACTUAL, {9, 7});//8
+    ss.AddDocument(i++, "a a4", DocumentStatus::BANNED, {7, 6, 8, 7, 21, -7, 7});//7
+    ss.AddDocument(i++, "a b a5", DocumentStatus::BANNED, {6, 14, 7, -3});//6
+    ss.AddDocument(i++, "a b c a6", DocumentStatus::BANNED, {20, -10});//5
+    ss.AddDocument(i++, "a a7", DocumentStatus::IRRELEVANT, {4});//4
+    ss.AddDocument(i++, "a b a8", DocumentStatus::IRRELEVANT, {6, 0});//3
+    ss.AddDocument(i++, "a b c a9", DocumentStatus::IRRELEVANT, {-4, 8});//2
+    ss.AddDocument(i++, "a a10", DocumentStatus::REMOVED, {1, 1, 1, 1});//1
+    ss.AddDocument(i++, "a b a11", DocumentStatus::REMOVED, {1, 2, 3, -6});//0
+
+    vector <Document> res;
+
+    res = ss.FindTopDocuments("a b c", DocumentStatus::ACTUAL);
+    ASSERT(res.size() == 3);
+    ASSERT(res[0].id == 2);
+    ASSERT(res[1].id == 1);
+    ASSERT(res[2].id == 0);
+
+    res = ss.FindTopDocuments("a b c", DocumentStatus::BANNED);
+    ASSERT(res.size() == 3);
+    ASSERT(res[0].id == 5);
+    ASSERT(res[1].id == 4);
+    ASSERT(res[2].id == 3);
+
+    res = ss.FindTopDocuments("a b c", DocumentStatus::IRRELEVANT);
+    ASSERT(res.size() == 3);
+    ASSERT(res[0].id == 8);
+    ASSERT(res[1].id == 7);
+    ASSERT(res[2].id == 6);
+
+    res = ss.FindTopDocuments("a b c", DocumentStatus::REMOVED);
+    ASSERT(res.size() == 2);
+    ASSERT(res[0].id == 10);
+    ASSERT(res[1].id == 9);
+}
+
+bool equal_double (double a, double b) {
+    return abs(a - b) < EPSILON;
+}
+
+//Корректное вычисление релевантности найденных документов.
+void RelevanceTest() {
+    SearchServer ss;
+    int i = 0;
+    DocumentStatus st = DocumentStatus::ACTUAL;
+    vector<int> rat = {1, 2, 3};
+    ss.AddDocument(i++, "a a a a", st, rat); // a.tf == 1
+    ss.AddDocument(i++, "a b a a", st, rat); // a.tf == 0.75 b.tf == 0.25
+    ss.AddDocument(i++, "a a b b", st, rat); // a.tf == 0.5 b.tf == 0.5
+    ss.AddDocument(i++, "b b a b", st, rat); // a.tf == 0.25 b.tf == 0.75
+    ss.AddDocument(i++, "b b b b", st, rat); // b.tf == 1
+    ss.AddDocument(i++, "b c b c b b b b b b", st, rat); // b.tf == 0.8 c.tf == 0.2
+
+    double a_idf = log(6. / 4.);
+    double b_idf = log(6. / 5.);
+    double c_idf = log(6);
+
+    vector <Document> res;
+
+    res = ss.FindTopDocuments("a");
+
+    ASSERT(res.size() == 4);
+    ASSERT(res[0].id == 0);
+    ASSERT(equal_double(res[0].relevance, a_idf * 1));
+
+    ASSERT(res[1].id == 1);
+    ASSERT(equal_double(res[1].relevance, a_idf * .75));
+
+    ASSERT(res[2].id == 2);
+    ASSERT(equal_double(res[2].relevance, a_idf * .5));
+
+    ASSERT(res[3].id == 3);
+    ASSERT(equal_double(res[3].relevance, a_idf * .25));
+
+    res = ss.FindTopDocuments("b");
+
+    ASSERT(res.size() == 5);
+
+    ASSERT(res[0].id == 4);
+    ASSERT(equal_double(res[0].relevance, b_idf * 1.));
+
+    ASSERT(res[1].id == 5);
+    ASSERT(equal_double(res[1].relevance, b_idf * .8));
+
+    ASSERT(res[2].id == 3);
+    ASSERT(equal_double(res[2].relevance, b_idf * .75));
+
+    ASSERT(res[3].id == 2);
+    ASSERT(equal_double(res[3].relevance, b_idf * .5));
+
+    ASSERT(res[4].id == 1);
+    ASSERT(equal_double(res[4].relevance, b_idf * .25));
+
+    res = ss.FindTopDocuments("c");
+    ASSERT(res.size() == 1);
+    ASSERT(res[0].id == 5);
+    ASSERT(equal_double(res[0].relevance, c_idf * .2));
+
+
+}
+
+// Функция TestSearchServer является точкой входа для запуска тестов
+void TestSearchServer() {
+    RUN_TEST(TestExcludeStopWordsFromAddedDocumentContent);
+    RUN_TEST(AddingTest);
+    RUN_TEST(MinusWordsTest);
+    RUN_TEST(MatchingTest);
+    RUN_TEST(SortTest);
+    RUN_TEST(RatingTest);
+    RUN_TEST(FilterTest);
+    RUN_TEST(SearchTest);
+    RUN_TEST(RelevanceTest);
+}
+
+// --------- Окончание модульных тестов поисковой системы -----------
+
