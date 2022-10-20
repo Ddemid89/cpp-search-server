@@ -166,10 +166,10 @@ void RatingTest() {
         docs_av_rating[i] = getAverRating(ratings[i]);
     }
 
-    ss.AddDocument(i, "a a a", DocumentStatus::ACTUAL, ratings[i]); ++i; // 3
-    ss.AddDocument(i, "b b b", DocumentStatus::ACTUAL, ratings[i]); ++i; // 0
-    ss.AddDocument(i, "c c c", DocumentStatus::ACTUAL, ratings[i]); ++i; // 0
-    ss.AddDocument(i, "d d d", DocumentStatus::ACTUAL, ratings[i]); ++i; // 2
+    ss.AddDocument(i, "a a a", DocumentStatus::ACTUAL, ratings[i]); ++i; 
+    ss.AddDocument(i, "b b b", DocumentStatus::ACTUAL, ratings[i]); ++i; 
+    ss.AddDocument(i, "c c c", DocumentStatus::ACTUAL, ratings[i]); ++i; 
+    ss.AddDocument(i, "d d d", DocumentStatus::ACTUAL, ratings[i]); ++i; 
 
     vector<Document> res;
     vector<string> requests = {"a", "b", "c", "d"};
@@ -186,17 +186,17 @@ void RatingTest() {
 void FilterTest() {
     SearchServer ss;
     int i = 0;
-    ss.AddDocument(i++, "a a1", DocumentStatus::ACTUAL, {-10, 30});//10
-    ss.AddDocument(i++, "a a2", DocumentStatus::ACTUAL, {3, -3, 27});//9
+    ss.AddDocument(i++, "a a1", DocumentStatus::ACTUAL, {-10, 30});
+    ss.AddDocument(i++, "a a2", DocumentStatus::ACTUAL, {3, -3, 27});
     ss.AddDocument(i++, "a a3", DocumentStatus::ACTUAL, {9, 7});//8
-    ss.AddDocument(i++, "a a4", DocumentStatus::BANNED, {7, 6, 8, 7, 21, -7, 7});//7
-    ss.AddDocument(i++, "a a5", DocumentStatus::BANNED, {6, 14, 7, -3});//6
-    ss.AddDocument(i++, "a a6", DocumentStatus::BANNED, {20, -10});//5
-    ss.AddDocument(i++, "a a7", DocumentStatus::IRRELEVANT, {4});//4
-    ss.AddDocument(i++, "a a8", DocumentStatus::IRRELEVANT, {6, 0});//3
-    ss.AddDocument(i++, "a a9", DocumentStatus::IRRELEVANT, {-4, 8});//2
-    ss.AddDocument(i++, "a a10", DocumentStatus::REMOVED, {1, 1, 1, 1});//1
-    ss.AddDocument(i++, "a a11", DocumentStatus::REMOVED, {1, 2, 3, -6});//0
+    ss.AddDocument(i++, "a a4", DocumentStatus::BANNED, {7, 6, 8, 7, 21, -7, 7});
+    ss.AddDocument(i++, "a a5", DocumentStatus::BANNED, {6, 14, 7, -3});
+    ss.AddDocument(i++, "a a6", DocumentStatus::BANNED, {20, -10});
+    ss.AddDocument(i++, "a a7", DocumentStatus::IRRELEVANT, {4});
+    ss.AddDocument(i++, "a a8", DocumentStatus::IRRELEVANT, {6, 0});
+    ss.AddDocument(i++, "a a9", DocumentStatus::IRRELEVANT, {-4, 8});
+    ss.AddDocument(i++, "a a10", DocumentStatus::REMOVED, {1, 1, 1, 1});
+    ss.AddDocument(i++, "a a11", DocumentStatus::REMOVED, {1, 2, 3, -6});
 
     vector <Document> res;
 
@@ -225,22 +225,22 @@ void FilterTest() {
 void StatusTest() {
     SearchServer ss;
     int i = 0;
-    ss.AddDocument(i++, "a a1", DocumentStatus::ACTUAL, {-10, 30});//10
-    ss.AddDocument(i++, "a b a2", DocumentStatus::ACTUAL, {3, -3, 27});//9
-    ss.AddDocument(i++, "a b c a3", DocumentStatus::ACTUAL, {9, 7});//8
-    ss.AddDocument(i++, "a a4", DocumentStatus::BANNED, {7, 6, 8, 7, 21, -7, 7});//7
-    ss.AddDocument(i++, "a b a5", DocumentStatus::BANNED, {6, 14, 7, -3});//6
-    ss.AddDocument(i++, "a b c a6", DocumentStatus::BANNED, {20, -10});//5
+    ss.AddDocument(i++, "a a1", DocumentStatus::ACTUAL, {-10, 30});
+    ss.AddDocument(i++, "a b a2", DocumentStatus::ACTUAL, {3, -3, 27});
+    ss.AddDocument(i++, "a b c a3", DocumentStatus::ACTUAL, {9, 7});
+    ss.AddDocument(i++, "a a4", DocumentStatus::BANNED, {7, 6, 8, 7, 21, -7, 7});
+    ss.AddDocument(i++, "a b a5", DocumentStatus::BANNED, {6, 14, 7, -3});
+    ss.AddDocument(i++, "a b c a6", DocumentStatus::BANNED, {20, -10});
 
     vector <Document> res;
     res = ss.FindTopDocuments("a", DocumentStatus::IRRELEVANT);
     ASSERT(res.size() == 0);
 
-    ss.AddDocument(i++, "a a7", DocumentStatus::IRRELEVANT, {4});//4
-    ss.AddDocument(i++, "a b a8", DocumentStatus::IRRELEVANT, {6, 0});//3
-    ss.AddDocument(i++, "a b c a9", DocumentStatus::IRRELEVANT, {-4, 8});//2
-    ss.AddDocument(i++, "a a10", DocumentStatus::REMOVED, {1, 1, 1, 1});//1
-    ss.AddDocument(i++, "a b a11", DocumentStatus::REMOVED, {1, 2, 3, -6});//0
+    ss.AddDocument(i++, "a a7", DocumentStatus::IRRELEVANT, {4});
+    ss.AddDocument(i++, "a b a8", DocumentStatus::IRRELEVANT, {6, 0});
+    ss.AddDocument(i++, "a b c a9", DocumentStatus::IRRELEVANT, {-4, 8});
+    ss.AddDocument(i++, "a a10", DocumentStatus::REMOVED, {1, 1, 1, 1});
+    ss.AddDocument(i++, "a b a11", DocumentStatus::REMOVED, {1, 2, 3, -6});
 
     res = ss.FindTopDocuments("a b c", DocumentStatus::ACTUAL);
     ASSERT(res.size() == 3);
