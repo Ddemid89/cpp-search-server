@@ -13,7 +13,6 @@ void TestExcludeStopWordsFromAddedDocumentContent() {
         const Document& doc0 = found_docs[0];
         ASSERT_EQUAL(doc0.id, doc_id);
     }
-
     {
         SearchServer server;
         server.SetStopWords("in the"s);
@@ -79,43 +78,48 @@ void MatchingTest() {
     ss.AddDocument(2, "a b c d e s3", DocumentStatus::BANNED, {1});
     ss.AddDocument(3, "d e f g y s4", DocumentStatus::REMOVED, {1});
 
-    {auto [res, stat] = ss.MatchDocument("a c d e f s1", 0); //Соответствующий документ
-    vector<string> expected_result = {"a", "c"};
-    ASSERT(res.size() == 2);
-    ASSERT_EQUAL(res, expected_result);
-    ASSERT(stat == DocumentStatus::ACTUAL);
+    {
+        auto [res, stat] = ss.MatchDocument("a c d e f s1", 0); //Соответствующий документ
+        vector<string> expected_result = {"a", "c"};
+        ASSERT(res.size() == 2);
+        ASSERT_EQUAL(res, expected_result);
+        ASSERT(stat == DocumentStatus::ACTUAL);
     }
 
     //Пустой из-за минус-слова
-    {auto [res, stat] = ss.MatchDocument("a c -d e f s1", 1);
-    vector<string> expected_result;
-    ASSERT(res.size() == 0);
-    ASSERT_EQUAL(res, expected_result);
-    ASSERT(stat == DocumentStatus::IRRELEVANT);
+    {
+        auto [res, stat] = ss.MatchDocument("a c -d e f s1", 1);
+        vector<string> expected_result;
+        ASSERT(res.size() == 0);
+        ASSERT_EQUAL(res, expected_result);
+        ASSERT(stat == DocumentStatus::IRRELEVANT);
     }
 
     //Игнорирует минус-стоп-слово
-    {auto [res, stat] = ss.MatchDocument("a c d e f -s3", 2);
-    vector<string> expected_result = {"a", "c", "d", "e"};
-    ASSERT(res.size() == 4);
-    ASSERT_EQUAL(res, expected_result);
-    ASSERT(stat == DocumentStatus::BANNED);
+    {
+        auto [res, stat] = ss.MatchDocument("a c d e f -s3", 2);
+        vector<string> expected_result = {"a", "c", "d", "e"};
+        ASSERT(res.size() == 4);
+        ASSERT_EQUAL(res, expected_result);
+        ASSERT(stat == DocumentStatus::BANNED);
     }
 
     //Игнорирует отсутствующее минус-слово
-    {auto [res, stat] = ss.MatchDocument("a c d e -f s1", 0);
-    vector<string> expected_result = {"a", "c"};
-    ASSERT(res.size() == 2);
-    ASSERT_EQUAL(res, expected_result);
-    ASSERT(stat == DocumentStatus::ACTUAL);
+    {
+        auto [res, stat] = ss.MatchDocument("a c d e -f s1", 0);
+        vector<string> expected_result = {"a", "c"};
+        ASSERT(res.size() == 2);
+        ASSERT_EQUAL(res, expected_result);
+        ASSERT(stat == DocumentStatus::ACTUAL);
     }
 
     //Поиск по стоп-слову = пустой запрос
-    {auto [res, stat] = ss.MatchDocument("s3", 3);
-    vector<string> expected_result;
-    ASSERT(res.size() == 0);
-    ASSERT_EQUAL(res, expected_result);
-    ASSERT(stat == DocumentStatus::REMOVED);
+    {
+        auto [res, stat] = ss.MatchDocument("s3", 3);
+        vector<string> expected_result;
+        ASSERT(res.size() == 0);
+        ASSERT_EQUAL(res, expected_result);
+        ASSERT(stat == DocumentStatus::REMOVED);
     }
 }
 
@@ -336,84 +340,80 @@ void RelevanceTest() {
 
     ASSERT(res.size() == 4);
 
-    int i = 0;
-
     {
-        Document& current_doc = res[i++];
+        Document& current_doc = res[0];
         int id = current_doc.id;
         ASSERT(id == 0);
         ASSERT(equal_double(current_doc.relevance, words_idfs[search_word] * words_in_docs_TF[id][search_word]));
     }
 
     {
-        Document& current_doc = res[i++];
+        Document& current_doc = res[1];
         int id = current_doc.id;
         ASSERT(id == 1);
         ASSERT(equal_double(current_doc.relevance, words_idfs[search_word] * words_in_docs_TF[id][search_word]));
     }
 
     {
-        Document& current_doc = res[i++];
+        Document& current_doc = res[2];
         int id = current_doc.id;
         ASSERT(id == 2);
         ASSERT(equal_double(current_doc.relevance, words_idfs[search_word] * words_in_docs_TF[id][search_word]));
     }
 
     {
-        Document& current_doc = res[i++];
+        Document& current_doc = res[3];
         int id = current_doc.id;
         ASSERT(id == 3);
         ASSERT(equal_double(current_doc.relevance, words_idfs[search_word] * words_in_docs_TF[id][search_word]));
     }
 
     search_word = "b";
-    i = 0;
     res = ss.FindTopDocuments(search_word);
 
     ASSERT(res.size() == 5);
 
     {
-        Document& current_doc = res[i++];
+        Document& current_doc = res[0];
         int id = current_doc.id;
         ASSERT(id == 4);
         ASSERT(equal_double(current_doc.relevance, words_idfs[search_word] * words_in_docs_TF[id][search_word]));
     }
 
     {
-        Document& current_doc = res[i++];
+        Document& current_doc = res[1];
         int id = current_doc.id;
         ASSERT(id == 5);
         ASSERT(equal_double(current_doc.relevance, words_idfs[search_word] * words_in_docs_TF[id][search_word]));
     }
 
     {
-        Document& current_doc = res[i++];
+        Document& current_doc = res[2];
         int id = current_doc.id;
         ASSERT(id == 3);
         ASSERT(equal_double(current_doc.relevance, words_idfs[search_word] * words_in_docs_TF[id][search_word]));
     }
 
     {
-        Document& current_doc = res[i++];
+        Document& current_doc = res[3];
         int id = current_doc.id;
         ASSERT(id == 2);
         ASSERT(equal_double(current_doc.relevance, words_idfs[search_word] * words_in_docs_TF[id][search_word]));
     }
 
     {
-        Document& current_doc = res[i++];
+        Document& current_doc = res[4];
         int id = current_doc.id;
         ASSERT(id == 1);
         ASSERT(equal_double(current_doc.relevance, words_idfs[search_word] * words_in_docs_TF[id][search_word]));
     }
 
     search_word = "c";
-    i = 0;
     res = ss.FindTopDocuments(search_word);
 
     ASSERT(res.size() == 1);
     {
-        Document& current_doc = res[i++];
+        Document& current_doc = res[0];
         int id = current_doc.id;
         ASSERT(id == 5);
         ASSERT(equal_double(current_doc.relevance, words_idfs[search_word] * words_in_docs_TF[id][search_word]));
