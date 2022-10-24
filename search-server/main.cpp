@@ -6,10 +6,12 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <numeric>
 
 using namespace std;
 
 const int MAX_RESULT_DOCUMENT_COUNT = 5;
+const double EPSILON = 10e-6;
 
 string ReadLine() {
     string s;
@@ -127,17 +129,13 @@ public:
     vector<Document> FindTopDocuments(const string& raw_query, DocumentPredicate document_predicate) const {
         if (!IsValidWord(raw_query)) throw invalid_argument("Query contains special chars.");
         const Query query = ParseQuery(raw_query);
-        for (const string& word : query.minus_words){
-            if (word == "") throw invalid_argument("Query contains word \"-\".");
-            if (word[0] == '-') throw invalid_argument("Query contains word \"-"s + word + "\". Using \"--\" is prohibited.");
-        }
 
         vector<Document> matched_documents;
         matched_documents = FindAllDocuments(query, document_predicate);
 
         sort(matched_documents.begin(), matched_documents.end(),
              [](const Document& lhs, const Document& rhs) {
-                 if (abs(lhs.relevance - rhs.relevance) < 1e-6) {
+                 if (abs(lhs.relevance - rhs.relevance) < EPSILON) {
                      return lhs.rating > rhs.rating;
                  } else {
                      return lhs.relevance > rhs.relevance;
@@ -173,8 +171,6 @@ public:
             }
         }
         for (const string& word : query.minus_words) {
-            if (word == "") throw invalid_argument("Query contains word \"-\".");
-            if (word[0] == '-') throw invalid_argument("Query contains word \"-"s + word + "\". Using \"--\" is prohibited.");
             if (word_to_document_freqs_.count(word) == 0) {
                 continue;
             }
@@ -221,11 +217,7 @@ private:
         if (ratings.empty()) {
             return 0;
         }
-        int rating_sum = 0;
-        for (const int rating : ratings) {
-            rating_sum += rating;
-        }
-        return rating_sum / static_cast<int>(ratings.size());
+        return accumulate(ratings.begin(), ratings.end(), 0, plus<int>()) / static_cast<int>(ratings.size());
     }
 
     struct QueryWord {
@@ -238,6 +230,9 @@ private:
         bool is_minus = false;
         // Word shouldn't be empty
         if (text[0] == '-') {
+            if (text.size() == 1) throw invalid_argument("Query contains word \"-\".");
+            if (text[1] == '-')
+            	throw invalid_argument("Query contains word \""s + text + "\". Using \"--\" is prohibited.");
             is_minus = true;
             text = text.substr(1);
         }
