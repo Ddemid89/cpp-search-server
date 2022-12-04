@@ -2,6 +2,7 @@
 
 #include <ostream>
 #include <vector>
+#include <cassert>
 
 template <typename Iterator>
 class IteratorRange {
@@ -38,6 +39,7 @@ public:
     Paginator (Iterator range_begin, Iterator range_end, size_t page_size) {
         Iterator page_begin = range_begin;
         Iterator page_end = page_begin;
+        assert(range_end >= range_begin && page_size > 0);
         while (page_end != range_end){
             if (distance(page_begin, range_end) >= page_size) {
                 page_end = page_begin;

@@ -89,9 +89,8 @@ template <typename StringContainer>
 SearchServer::SearchServer(const StringContainer& stop_words)
     : stop_words_(MakeUniqueNonEmptyStrings(stop_words))  // Extract non-empty stop words
 {
-    using namespace std;// Как заставить ""s работать без этого?
     if (!all_of(stop_words_.begin(), stop_words_.end(), IsValidWord)) {
-        throw invalid_argument("Some of stop words are invalid"s);
+        throw std::invalid_argument("Some of stop words are invalid");
     }
 }
 

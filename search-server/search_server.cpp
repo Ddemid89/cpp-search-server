@@ -146,6 +146,6 @@ SearchServer::Query SearchServer::ParseQuery(const std::string& text) const {
 }
 
     // Existence required
-double SearchServer::ComputeWordInverseDocumentFreq(const std::string& word) const {
-    return log(GetDocumentCount() * 1.0 / word_to_document_freqs_.at(word).size());
-}
+    double SearchServer::ComputeWordInverseDocumentFreq(const std::string& word) const {
+        return log(GetDocumentCount() * 1.0 / word_to_document_freqs_.at(word).size());
+    }

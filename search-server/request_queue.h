@@ -22,7 +22,7 @@ private:
         int relevance_time;
     };
 
-    void saveRequest(const std::vector<Document>& result);
+    void SaveRequest(const std::vector<Document>& result);
 
     std::deque<QueryResult> requests_;
     const static int min_in_day_ = 1440;
@@ -36,6 +36,6 @@ template <typename DocumentPredicate>
 std::vector<Document> RequestQueue::AddFindRequest(const std::string& raw_query,
                                                    DocumentPredicate document_predicate) {
     const std::vector<Document> result = server.FindTopDocuments(raw_query, document_predicate);
-    saveRequest(result);
+    SaveRequest(result);
     return result;
 }
